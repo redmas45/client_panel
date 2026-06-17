@@ -279,7 +279,14 @@ function Trend({ rows }: { rows: SeriesRow[] }) {
 }
 
 function clientSlugFromUrl(): string {
-  const slug = window.location.pathname.split('/').filter(Boolean)[0] || 'vercel_website';
+  const parts: string[] = window.location.pathname.split('/').filter(Boolean);
+  const baseParts: string[] = (import.meta.env.VITE_CLIENT_PANEL_BASE_PATH || '/client-panel/')
+    .split('/')
+    .filter(Boolean);
+  const scopedParts = baseParts.every((part, index) => parts[index] === part)
+    ? parts.slice(baseParts.length)
+    : parts;
+  const slug = scopedParts[0] || import.meta.env.VITE_DEFAULT_CLIENT_ID || 'ai_kart';
   return slug.replace(/-/g, '_');
 }
 

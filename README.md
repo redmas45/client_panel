@@ -20,10 +20,10 @@ Deployment steps are in `clientpanel.md`.
 Default dev URL:
 
 ```text
-http://127.0.0.1:5177/vercel_website
+http://127.0.0.1:5177/client-panel/ai_kart
 ```
 
-The first URL segment is used as the client ID hint. The login still requires the Hub-issued client panel password.
+The client name after `/client-panel/` is used as the client ID hint. Current client is `ai_kart`; future clients use the same pattern, such as `/client-panel/acme_store`. The login still requires the Hub-issued client panel password.
 
 ## Environment
 
@@ -31,6 +31,8 @@ Copy `.env.example` to `.env.local`:
 
 ```env
 VITE_AI_HUB_API_BASE=http://143.198.5.97/aihub
+VITE_CLIENT_PANEL_BASE_PATH=/client-panel/
+VITE_DEFAULT_CLIENT_ID=ai_kart
 ```
 
 For local Hub Docker, use the local Hub origin instead.

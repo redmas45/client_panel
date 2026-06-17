@@ -5,15 +5,20 @@ Use this for the client-facing analytics portal.
 ```text
 Project:      /var/www/client_panel
 Local app:    http://127.0.0.1:5177
-Client URL:   http://143.198.5.97:5177/vercel_website
+Public URL:   http://143.198.5.97/client-panel/ai_kart
 Hub API:      http://143.198.5.97/aihub
 ```
 
-The first URL segment is the client ID hint. For this setup:
+All three projects share public port `80` and are separated by paths:
 
 ```text
-/vercel_website -> site_id vercel_website
+/                  -> AI-KART website
+/api/              -> AI-KART backend
+/aihub/            -> AI Hub
+/client-panel/<client_id> -> Client Panel
 ```
+
+The client name comes after `/client-panel/`. For this setup, `/client-panel/ai_kart` maps to `site_id=ai_kart`. Future clients use the same pattern, for example `/client-panel/acme_store`.
 
 The panel still requires the client-panel password issued from AI Hub.
 
@@ -29,6 +34,8 @@ git pull
 ```bash
 cat > /var/www/client_panel/.env.local <<'EOF'
 VITE_AI_HUB_API_BASE=http://143.198.5.97/aihub
+VITE_CLIENT_PANEL_BASE_PATH=/client-panel/
+VITE_DEFAULT_CLIENT_ID=ai_kart
 EOF
 ```
 
@@ -37,6 +44,8 @@ Use HTTPS here after certificates are active:
 ```text
 VITE_AI_HUB_API_BASE=https://143.198.5.97/aihub
 ```
+
+Keep `VITE_CLIENT_PANEL_BASE_PATH=/client-panel/` while the panel is served on the same domain and port as the website.
 
 ## 3. Install And Build
 
@@ -61,7 +70,7 @@ pm2 list
 ## 5. Test
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5177/vercel_website
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5177/client-panel/ai_kart
 ```
 
 Expected:
@@ -73,17 +82,39 @@ Expected:
 Open:
 
 ```text
-http://143.198.5.97:5177/vercel_website
+http://143.198.5.97/client-panel/ai_kart
 ```
+
+If the public URL returns `404` or `502`, do not add Nginx config in this repo. Apply or reload the shared edge config from `/var/www/Vercel_website/aikart.md`.
 
 Login with:
 
 ```text
-Client ID: vercel_website
+Client ID: ai_kart
 Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific password
 ```
 
-## 6. Hub Requirements
+## 6. Public Routing Requirement
+
+This project only owns the local panel app on `http://127.0.0.1:5177`.
+
+The public `/client-panel/` route is edge/shared Nginx config. In the current same-IP setup, AI-KART owns `/` and `/api/`, so the shared Nginx block belongs in `/var/www/Vercel_website/aikart.md`.
+
+Do not add AI-KART `/`, `/api/`, or AI Hub `/aihub/` proxy rules in this client panel guide. If you later use a dedicated hostname such as `panel.ergobite.com`, configure that hostname in Nginx to proxy directly to `http://127.0.0.1:5177`.
+
+After AI-KART/shared Nginx is deployed, test:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://143.198.5.97/client-panel/ai_kart
+```
+
+Expected:
+
+```text
+200
+```
+
+## 7. Hub Requirements
 
 AI Hub `.env` must include:
 
@@ -99,12 +130,12 @@ cd /var/www/AI_salesman_plugin
 sudo docker compose up -d --build --force-recreate db app
 ```
 
-## 7. HTTPS Later
+## 8. HTTPS Later
 
 For production, put this panel behind HTTPS with a clean hostname such as:
 
 ```text
-https://panel.ergobite.com/vercel_website
+https://panel.ergobite.com/ai_kart
 ```
 
 Keep the path as the client name so each client gets a clear panel URL.
