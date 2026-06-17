@@ -22,14 +22,21 @@ The client name comes after `/client-panel/`. For this setup, `/client-panel/ai_
 
 The panel still requires the client-panel password issued from AI Hub.
 
-## 1. Pull Code
+## 1. Fix Permissions
+
+```bash
+sudo chown -R $(whoami):$(whoami) /var/www/client_panel
+sudo chown -R $(whoami):$(whoami) /Data/www/client_panel
+```
+
+## 2. Pull Code
 
 ```bash
 cd /var/www/client_panel
 git pull
 ```
 
-## 2. Create Environment
+## 3. Create Environment
 
 ```bash
 cat > /var/www/client_panel/.env.local <<'EOF'
@@ -47,7 +54,7 @@ VITE_AI_HUB_API_BASE=https://143.198.5.97/aihub
 
 Keep `VITE_CLIENT_PANEL_BASE_PATH=/client-panel/` while the panel is served on the same domain and port as the website.
 
-## 3. Install And Build
+## 4. Install And Build
 
 ```bash
 cd /var/www/client_panel
@@ -55,7 +62,7 @@ npm install
 npm run build
 ```
 
-## 4. Start With PM2
+## 5. Start With PM2
 
 ```bash
 cd /var/www/client_panel
@@ -67,7 +74,7 @@ pm2 save
 pm2 list
 ```
 
-## 5. Test
+## 6. Test
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5177/client-panel/ai_kart
@@ -94,7 +101,7 @@ Client ID: ai_kart
 Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific password
 ```
 
-## 6. Public Routing Requirement
+## 7. Public Routing Requirement
 
 This project only owns the local panel app on `http://127.0.0.1:5177`.
 
@@ -114,7 +121,7 @@ Expected:
 200
 ```
 
-## 7. Hub Requirements
+## 8. Hub Requirements
 
 AI Hub `.env` must include:
 
@@ -130,7 +137,7 @@ cd /var/www/AI_salesman_plugin
 sudo docker compose up -d --build --force-recreate db app
 ```
 
-## 8. HTTPS Later
+## 9. HTTPS Later
 
 For production, put this panel behind HTTPS with a clean hostname such as:
 
