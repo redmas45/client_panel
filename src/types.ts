@@ -1,0 +1,82 @@
+export interface QuotaPart {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface ClientSummary {
+  site_id: string;
+  name: string;
+  store_url: string;
+  status: string;
+  plan: string;
+  session_token_limit: number;
+  usage: {
+    total_turns: number;
+    turns_today: number;
+    tokens_estimated: number;
+    avg_latency_ms: number;
+  };
+  quota: {
+    client: QuotaPart;
+    session: QuotaPart;
+  };
+  catalog: {
+    active_products: number;
+    total_products: number;
+    categories: number;
+  };
+}
+
+export interface RankRow {
+  label: string;
+  count: number;
+}
+
+export interface SeriesRow {
+  date: string;
+  turns: number;
+  tokens: number;
+}
+
+export interface Analytics {
+  metrics: {
+    turns: number;
+    tokens: number;
+    avg_latency_ms: number;
+  };
+  summary: string;
+  summary_source?: string;
+  top_products: RankRow[];
+  top_intents: RankRow[];
+  series: SeriesRow[];
+}
+
+export interface ConversationTurn {
+  transcript: string;
+  response_text: string;
+  intent: string;
+  tokens: number;
+  latency_ms: number;
+  created_at: string;
+}
+
+export interface ConversationSession {
+  session_id: string;
+  turns: ConversationTurn[];
+}
+
+export interface ConversationGroup {
+  date: string;
+  sessions: ConversationSession[];
+}
+
+export interface Conversations {
+  groups: ConversationGroup[];
+}
+
+export interface DashboardResponse {
+  client: ClientSummary;
+  analytics: Analytics;
+  conversations: Conversations;
+}

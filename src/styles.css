@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+@theme {
+  --color-page: #f5f7f8;
+  --color-panel: #ffffff;
+  --color-soft: #edf2ef;
+  --color-line: #dfe7e4;
+  --color-ink: #202626;
+  --color-muted: #687373;
+  --color-accent: #d85a30;
+  --color-green: #27895d;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-page);
+}
+
+select,
+input {
+  height: 40px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-panel);
+  padding: 0 12px;
+  color: var(--color-ink);
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+label span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.panel,
+.login-card {
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-panel);
+  box-shadow: 0 16px 34px rgba(27, 39, 42, 0.08);
+}
+
+.panel {
+  padding: 18px;
+}
+
+.login-card {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 16px;
+  padding: 24px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 720;
+}
+
+.panel-head span,
+.muted {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.button {
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.button.primary {
+  background: var(--color-ink);
+  color: #fff;
+}
+
+.button.secondary {
+  border-color: var(--color-line);
+  background: var(--color-soft);
+  color: var(--color-ink);
+}
+
+.button.ghost {
+  border-color: var(--color-line);
+  background: transparent;
+}
+
+.metric span,
+.metric small {
+  display: block;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.metric strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 28px;
+}
+
+.summary {
+  white-space: pre-line;
+  color: var(--color-ink);
+  line-height: 1.65;
+}
+
+.trend {
+  display: flex;
+  align-items: end;
+  gap: 5px;
+  height: 120px;
+  margin-top: 20px;
+  border-top: 1px solid var(--color-line);
+  padding-top: 14px;
+}
+
+.trend span {
+  flex: 1;
+  min-width: 8px;
+  border-radius: 5px 5px 0 0;
+  background: var(--color-accent);
+}
+
+.quota {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-soft);
+}
+
+.quota span {
+  display: block;
+  height: 100%;
+  background: var(--color-green);
+}
+
+.policy-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.bars {
+  display: grid;
+  gap: 12px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 2fr) 40px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.bar-row div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-soft);
+}
+
+.bar-row i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.conversation-list {
+  display: grid;
+  gap: 12px;
+}
+
+.conversation {
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.conversation small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-muted);
+}
+
+.turn {
+  margin-top: 10px;
+  border-top: 1px solid var(--color-line);
+  padding-top: 10px;
+  font-size: 13px;
+}
+
+.turn p {
+  margin: 4px 0;
+}
+
+.notice {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.notice.error {
+  border: 1px solid rgba(194, 71, 63, 0.28);
+  background: rgba(194, 71, 63, 0.1);
+  color: #a03630;
+}
