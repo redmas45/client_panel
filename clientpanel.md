@@ -229,7 +229,7 @@ Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific
 Check:
 
 - Header uses the AI-KART dark brand bar.
-- Page shows voice commerce cockpit hero, KPI cards, demand trend, token policy, assistant health, product demand, intent mix, catalog health, and recent conversations.
+- Page shows a tabbed client workspace with Overview, Demand, Conversations, Catalog, and Token policy sections.
 - Per-shopper/session token limit saves successfully.
 
 ## 13. Hub Requirements

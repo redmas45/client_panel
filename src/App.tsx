@@ -3,6 +3,9 @@ import { clearToken, dashboard, login, storedToken, updateSessionLimit } from '.
 import type { ClientSummary, ConversationSession, DashboardResponse, RankRow, SeriesRow } from './types';
 
 const DEFAULT_RANGE = '7d';
+const RECENT_SESSION_LIMIT = 6;
+const TREND_BAR_LIMIT = 14;
+
 const RANGE_OPTIONS = [
   ['1d', '1 day'],
   ['7d', '7 days'],
@@ -10,6 +13,16 @@ const RANGE_OPTIONS = [
   ['3m', '3 months'],
   ['all', 'All time'],
 ] as const;
+
+const DASHBOARD_TABS = [
+  ['overview', 'Overview'],
+  ['demand', 'Demand'],
+  ['conversations', 'Conversations'],
+  ['catalog', 'Catalog'],
+  ['policy', 'Token policy'],
+] as const;
+
+type DashboardTab = (typeof DASHBOARD_TABS)[number][0];
 
 export function App() {
   const [range, setRange] = useState(DEFAULT_RANGE);
@@ -31,7 +44,7 @@ export function App() {
     try {
       setData(await dashboard(nextRange));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dashboard failed to load.');
+      setError(err instanceof Error ? err.message : 'Panel failed to load.');
       clearToken();
       setAuthenticated(false);
     } finally {
@@ -128,20 +141,108 @@ function Dashboard({
   range: string;
   onLimitUpdated: (client: ClientSummary) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const { client, analytics, conversations } = data;
+  const sessions = flattenedSessions(conversations.groups);
+
   return (
     <>
-      <HeroPanel client={client} range={range} />
+      <ClientSummaryBar client={client} range={range} sessions={sessions.length} />
+      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === 'overview' ? (
+        <OverviewTab data={data} range={range} sessions={sessions} onLimitUpdated={onLimitUpdated} />
+      ) : null}
+      {activeTab === 'demand' ? <DemandTab data={data} /> : null}
+      {activeTab === 'conversations' ? <ConversationTab sessions={sessions} /> : null}
+      {activeTab === 'catalog' ? <CatalogTab client={client} analytics={analytics} /> : null}
+      {activeTab === 'policy' ? <PolicyTab client={client} onLimitUpdated={onLimitUpdated} /> : null}
+    </>
+  );
+}
+
+function ClientSummaryBar({ client, range, sessions }: { client: ClientSummary; range: string; sessions: number }) {
+  return (
+    <section className="client-summary-bar">
+      <div>
+        <p className="eyebrow">Client workspace</p>
+        <h1>{client.name}</h1>
+        <p>
+          {client.store_url} · {rangeLabel(range)} · {number(sessions)} sessions
+        </p>
+      </div>
+      <div className="summary-strip">
+        <StatusPill label={client.status} />
+        <MiniStat label="Products" value={client.catalog.active_products} />
+        <MiniStat label="Tokens left" value={client.quota.client.remaining} />
+      </div>
+    </section>
+  );
+}
+
+function TabBar({ activeTab, onChange }: { activeTab: DashboardTab; onChange: (tab: DashboardTab) => void }) {
+  return (
+    <nav className="panel-tabs" aria-label="Client panel sections">
+      {DASHBOARD_TABS.map(([value, label]) => (
+        <button
+          key={value}
+          className={value === activeTab ? 'active' : ''}
+          type="button"
+          onClick={() => onChange(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function OverviewTab({
+  data,
+  range,
+  sessions,
+  onLimitUpdated,
+}: {
+  data: DashboardResponse;
+  range: string;
+  sessions: ConversationPreview[];
+  onLimitUpdated: (client: ClientSummary) => void;
+}) {
+  const { client, analytics } = data;
+
+  return (
+    <div className="tab-stack">
       <div className="metric-grid">
-        <Metric label="Voice turns" value={analytics.metrics.turns} detail={rangeLabel(range)} />
-        <Metric label="AI sessions" value={analytics.metrics.sessions ?? conversations.groups.length} detail="Shopper conversations" />
-        <Metric label="Avg latency" value={`${number(Math.round(analytics.metrics.avg_latency_ms))} ms`} detail="Voice response speed" />
-        <Metric label="Products indexed" value={client.catalog.active_products} detail={`${number(client.catalog.categories)} categories`} />
+        <Metric label="Turns" value={analytics.metrics.turns} detail={rangeLabel(range)} tone="accent" />
+        <Metric label="Sessions" value={analytics.metrics.sessions ?? sessions.length} detail="Shopper conversations" tone="blue" />
+        <Metric label="Avg response" value={`${number(Math.round(analytics.metrics.avg_latency_ms))} ms`} detail="Assistant latency" tone="green" />
+        <Metric label="Indexed" value={client.catalog.active_products} detail={`${number(client.catalog.categories)} categories`} tone="ink" />
       </div>
 
-      <div className="dashboard-layout">
+      <div className="overview-grid">
         <StoreSummary summary={analytics.summary} source={analytics.summary_source || 'heuristic'} />
-        <TokenPolicy client={client} onLimitUpdated={onLimitUpdated} />
+        <TokenSnapshot client={client} onLimitUpdated={onLimitUpdated} />
+      </div>
+
+      <div className="overview-grid compact">
+        <RankPanel title="Products customers asked about" rows={analytics.top_products} />
+        <RecentConversations sessions={sessions.slice(0, 3)} />
+      </div>
+    </div>
+  );
+}
+
+function DemandTab({ data }: { data: DashboardResponse }) {
+  const { analytics } = data;
+
+  return (
+    <div className="tab-stack">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">Demand</p>
+          <h2>What shoppers are asking for</h2>
+        </div>
+        <span>{analytics.peak_day ? `Peak day: ${analytics.peak_day.date}` : 'No peak day yet'}</span>
       </div>
 
       <div className="dashboard-layout wide-left">
@@ -157,30 +258,82 @@ function Dashboard({
       <div className="rank-grid">
         <RankPanel title="Product demand" rows={analytics.top_products} />
         <RankPanel title="Intent mix" rows={analytics.top_intents} />
-        <CatalogPanel client={client} />
+        <RankPanel title="Status mix" rows={analytics.status_mix ?? []} />
       </div>
-
-      <ConversationPanel groups={conversations.groups} />
-    </>
+    </div>
   );
 }
 
-function HeroPanel({ client, range }: { client: ClientSummary; range: string }) {
+function ConversationTab({ sessions }: { sessions: ConversationPreview[] }) {
   return (
-    <section className="hero-panel">
-      <div>
-        <p className="eyebrow">Voice commerce cockpit</p>
-        <h1>{client.name}</h1>
-        <p className="hero-copy">
-          Track shopper demand, AI usage, catalog coverage, and token policy from one client-scoped view.
-        </p>
+    <div className="tab-stack">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">Conversations</p>
+          <h2>Recent shopper sessions</h2>
+        </div>
+        <span>{number(sessions.length)} sessions in range</span>
       </div>
-      <div className="hero-stats" aria-label="Client status">
-        <span>{client.status}</span>
-        <strong>{number(client.quota.client.remaining)}</strong>
-        <small>tokens remaining for {rangeLabel(range).toLowerCase()}</small>
+      <ConversationPanel sessions={sessions} />
+    </div>
+  );
+}
+
+function CatalogTab({ client, analytics }: { client: ClientSummary; analytics: DashboardResponse['analytics'] }) {
+  return (
+    <div className="tab-stack">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">Catalog</p>
+          <h2>Coverage and indexing</h2>
+        </div>
+        <span>{client.plan}</span>
       </div>
-    </section>
+
+      <div className="catalog-workspace">
+        <CatalogPanel client={client} />
+        <section className="panel">
+          <PanelHeader title="Catalog signals" detail="current range" />
+          <div className="signal-grid">
+            <Metric label="Total products" value={client.catalog.total_products} detail="All catalog rows" tone="ink" />
+            <Metric label="Active products" value={client.catalog.active_products} detail="Available to AI" tone="green" />
+            <Metric label="Categories" value={client.catalog.categories} detail="Indexed groups" tone="blue" />
+          </div>
+        </section>
+      </div>
+
+      <div className="rank-grid two">
+        <RankPanel title="Most requested products" rows={analytics.top_products} />
+        <RankPanel title="Intent mix near catalog" rows={analytics.top_intents} />
+      </div>
+    </div>
+  );
+}
+
+function PolicyTab({ client, onLimitUpdated }: { client: ClientSummary; onLimitUpdated: (client: ClientSummary) => void }) {
+  return (
+    <div className="tab-stack">
+      <div className="section-intro">
+        <div>
+          <p className="eyebrow">Token policy</p>
+          <h2>Control client usage</h2>
+        </div>
+        <span>{number(client.quota.client.remaining)} tokens remaining</span>
+      </div>
+
+      <div className="policy-layout">
+        <TokenPolicy client={client} onLimitUpdated={onLimitUpdated} />
+        <section className="panel">
+          <PanelHeader title="Usage guardrails" detail={client.status} />
+          <div className="guardrail-list">
+            <KeyLine label="Purchased limit" value={number(client.quota.client.limit)} />
+            <KeyLine label="Purchased used" value={number(client.quota.client.used)} />
+            <KeyLine label="Per session limit" value={number(client.session_token_limit)} />
+            <KeyLine label="Session remaining" value={number(client.quota.session.remaining)} />
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 
@@ -200,8 +353,8 @@ function LoginView({
       <section className="login-hero">
         <span className="brand-mark">AK</span>
         <p className="eyebrow">Client analytics</p>
-        <h1>AI-KART voice commerce panel</h1>
-        <p>Client-only insight into demand, conversations, token usage, and catalog health.</p>
+        <h1>Store performance for the AI assistant</h1>
+        <p>Review demand, conversations, catalog coverage, and token policy for your store.</p>
       </section>
       <form className="login-card" onSubmit={onSubmit}>
         <div>
@@ -229,7 +382,7 @@ function StoreSummary({ summary, source }: { summary: string; source: string }) 
   const lines = summaryLines(summary);
   return (
     <section className="panel summary-panel">
-      <PanelHeader title="Store summary" detail={source} />
+      <PanelHeader title="Store notes" detail={source} />
       <div className="summary-list">
         {lines.map((line) => (
           <p key={line}>{line}</p>
@@ -239,11 +392,51 @@ function StoreSummary({ summary, source }: { summary: string; source: string }) 
   );
 }
 
+function TokenSnapshot({
+  client,
+  onLimitUpdated,
+}: {
+  client: ClientSummary;
+  onLimitUpdated: (client: ClientSummary) => void;
+}) {
+  return (
+    <section className="panel">
+      <PanelHeader title="Token snapshot" detail={client.status} />
+      <Progress value={percent(client.quota.client.used, client.quota.client.limit)} />
+      <p className="muted">
+        {number(client.quota.client.used)} of {number(client.quota.client.limit)} purchased tokens used.
+      </p>
+      <TokenLimitForm client={client} onLimitUpdated={onLimitUpdated} compact />
+    </section>
+  );
+}
+
 function TokenPolicy({
   client,
   onLimitUpdated,
 }: {
   client: ClientSummary;
+  onLimitUpdated: (client: ClientSummary) => void;
+}) {
+  return (
+    <section className="panel">
+      <PanelHeader title="Per shopper limit" detail="editable" />
+      <Progress value={percent(client.quota.client.used, client.quota.client.limit)} />
+      <p className="muted">
+        {number(client.quota.client.remaining)} purchased tokens remain. Set the maximum each shopper/session can use.
+      </p>
+      <TokenLimitForm client={client} onLimitUpdated={onLimitUpdated} />
+    </section>
+  );
+}
+
+function TokenLimitForm({
+  client,
+  compact = false,
+  onLimitUpdated,
+}: {
+  client: ClientSummary;
+  compact?: boolean;
   onLimitUpdated: (client: ClientSummary) => void;
 }) {
   const [limit, setLimit] = useState(String(client.session_token_limit));
@@ -257,7 +450,7 @@ function TokenPolicy({
     try {
       const updated = await updateSessionLimit(Number(limit));
       onLimitUpdated(updated);
-      setMessage('Policy updated.');
+      setMessage('Saved.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Policy update failed.');
     } finally {
@@ -266,26 +459,22 @@ function TokenPolicy({
   }
 
   return (
-    <section className="panel">
-      <PanelHeader title="Token policy" detail={client.status} />
-      <Progress value={percent(client.quota.client.used, client.quota.client.limit)} />
-      <p className="muted">{number(client.quota.client.used)} of {number(client.quota.client.limit)} purchased tokens used.</p>
-      <form className="policy-form" onSubmit={submit}>
-        <label>
-          <span>Per shopper/session limit</span>
-          <input value={limit} onChange={(event) => setLimit(event.currentTarget.value)} type="number" min={1} max={1000000} />
-        </label>
-        <button className="button secondary" type="submit" disabled={busy}>Save limit</button>
-      </form>
+    <form className={`policy-form ${compact ? 'compact' : ''}`} onSubmit={submit}>
+      <label>
+        <span>Per shopper/session limit</span>
+        <input value={limit} onChange={(event) => setLimit(event.currentTarget.value)} type="number" min={1} max={1000000} />
+      </label>
+      <button className="button secondary" type="submit" disabled={busy}>Save limit</button>
       {message ? <p className="muted">{message}</p> : null}
-    </section>
+    </form>
   );
 }
 
 function DemandTrend({ rows, peakDay }: { rows: SeriesRow[]; peakDay?: SeriesRow | null }) {
-  const visibleRows = rows.slice(-14);
+  const visibleRows = rows.slice(-TREND_BAR_LIMIT);
   const maxTurns = Math.max(...visibleRows.map((row) => row.turns), 1);
   const maxTokens = Math.max(...visibleRows.map((row) => row.tokens), 1);
+
   return (
     <section className="panel">
       <PanelHeader title="Demand trend" detail={peakDay ? `Peak ${peakDay.date}` : 'No peak yet'} />
@@ -319,7 +508,7 @@ function OperationsPanel({
 }) {
   return (
     <section className="panel">
-      <PanelHeader title="Assistant health" detail="live range" />
+      <PanelHeader title="Assistant health" detail="current range" />
       <div className="meter-stack">
         <Meter label="Action rate" value={actionRate} />
         <Meter label="Error rate" value={errorRate} danger />
@@ -345,27 +534,13 @@ function CatalogPanel({ client }: { client: ClientSummary }) {
   );
 }
 
-function ConversationPanel({ groups }: { groups: Array<{ date: string; sessions: ConversationSession[] }> }) {
-  const sessions = groups
-    .flatMap((group) => group.sessions.map((session) => ({ ...session, date: group.date })))
-    .slice(0, 6);
+function ConversationPanel({ sessions }: { sessions: ConversationPreview[] }) {
   return (
     <section className="panel conversation-panel">
-      <PanelHeader title="Recent conversations" detail={`${number(sessions.length)} sessions`} />
+      <PanelHeader title="Conversation log" detail={`${number(sessions.length)} sessions`} />
       <div className="conversation-list">
         {sessions.map((session) => (
-          <article className="conversation" key={`${session.date}-${session.session_id}`}>
-            <div>
-              <strong>{session.date}</strong>
-              <small>{session.session_id}</small>
-            </div>
-            {session.turns.slice(0, 2).map((turn, index) => (
-              <div className="turn" key={`${turn.created_at}-${index}`}>
-                <p><b>User</b> {turn.transcript || '-'}</p>
-                <p><b>AI</b> {turn.response_text || '-'}</p>
-              </div>
-            ))}
-          </article>
+          <ConversationCard key={`${session.date}-${session.session_id}`} session={session} />
         ))}
         {!sessions.length ? <p className="muted">No conversations in this range.</p> : null}
       </div>
@@ -373,11 +548,57 @@ function ConversationPanel({ groups }: { groups: Array<{ date: string; sessions:
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: string | number; detail: string }) {
+function RecentConversations({ sessions }: { sessions: ConversationPreview[] }) {
   return (
-    <section className="panel metric">
+    <section className="panel">
+      <PanelHeader title="Recent conversations" detail={`${number(sessions.length)} shown`} />
+      <div className="conversation-list compact">
+        {sessions.map((session) => (
+          <ConversationCard key={`${session.date}-${session.session_id}`} session={session} compact />
+        ))}
+        {!sessions.length ? <p className="muted">No conversations in this range.</p> : null}
+      </div>
+    </section>
+  );
+}
+
+function ConversationCard({ session, compact = false }: { session: ConversationPreview; compact?: boolean }) {
+  const turns = compact ? session.turns.slice(0, 1) : session.turns;
+
+  return (
+    <article className="conversation">
+      <div className="conversation-meta">
+        <strong>{session.date}</strong>
+        <small>{shortSessionId(session.session_id)}</small>
+      </div>
+      {turns.map((turn, index) => (
+        <div className="turn" key={`${turn.created_at}-${index}`}>
+          <p><b>User</b> {turn.transcript || '-'}</p>
+          <p><b>AI</b> {turn.response_text || '-'}</p>
+          {!compact ? (
+            <small>{turn.intent || 'unknown'} · {number(turn.tokens)} tokens · {number(Math.round(turn.latency_ms))} ms</small>
+          ) : null}
+        </div>
+      ))}
+    </article>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone: 'accent' | 'blue' | 'green' | 'ink';
+}) {
+  return (
+    <section className={`panel metric tone-${tone}`}>
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong>{typeof value === 'number' ? number(value) : value}</strong>
       <small>{detail}</small>
     </section>
   );
@@ -386,7 +607,7 @@ function Metric({ label, value, detail }: { label: string; value: string | numbe
 function RankPanel({ title, rows }: { title: string; rows: RankRow[] }) {
   return (
     <section className="panel">
-      <PanelHeader title={title} detail={`${rows.length} signals`} />
+      <PanelHeader title={title} detail={`${number(rows.length)} signals`} />
       <MiniRank title="" rows={rows} />
     </section>
   );
@@ -394,6 +615,7 @@ function RankPanel({ title, rows }: { title: string; rows: RankRow[] }) {
 
 function MiniRank({ title, rows }: { title: string; rows: RankRow[] }) {
   const max = Math.max(...rows.map((row) => row.count), 1);
+
   return (
     <div className="mini-rank">
       {title ? <h3>{title}</h3> : null}
@@ -447,8 +669,31 @@ function KeyLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+function StatusPill({ label }: { label: string }) {
+  return <span className={`status-pill ${label.toLowerCase()}`}>{label}</span>;
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="mini-stat">
+      <span>{label}</span>
+      <strong>{number(value)}</strong>
+    </div>
+  );
+}
+
 function LoadingPanel() {
   return <section className="panel loading-panel">Loading panel...</section>;
+}
+
+interface ConversationPreview extends ConversationSession {
+  date: string;
+}
+
+function flattenedSessions(groups: DashboardResponse['conversations']['groups']): ConversationPreview[] {
+  return groups
+    .flatMap((group) => group.sessions.map((session) => ({ ...session, date: group.date })))
+    .slice(0, RECENT_SESSION_LIMIT);
 }
 
 function summaryLines(summary: string): string[] {
@@ -478,6 +723,11 @@ function rangeLabel(range: string): string {
 function percent(value: number, max: number): number {
   if (!max) return 0;
   return Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+}
+
+function shortSessionId(sessionId: string): string {
+  if (sessionId.length <= 18) return sessionId;
+  return `${sessionId.slice(0, 8)}...${sessionId.slice(-6)}`;
 }
 
 function number(value: unknown): string {
