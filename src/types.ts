@@ -43,12 +43,21 @@ export interface Analytics {
   metrics: {
     turns: number;
     tokens: number;
+    sessions?: number;
     avg_latency_ms: number;
+    actions?: number;
+    action_rate?: number;
+    error_rate?: number;
+    tokens_per_turn?: number;
   };
   summary: string;
   summary_source?: string;
   top_products: RankRow[];
   top_intents: RankRow[];
+  status_mix?: RankRow[];
+  transport_mix?: RankRow[];
+  latency_buckets?: RankRow[];
+  peak_day?: SeriesRow | null;
   series: SeriesRow[];
 }
 

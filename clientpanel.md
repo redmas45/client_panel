@@ -22,6 +22,15 @@ The client name comes after `/client-panel/`. For this setup, `/client-panel/ai_
 
 The panel still requires the client-panel password issued from AI Hub.
 
+Deploy order for the current UI/API update:
+
+1. Deploy AI Hub first from `/var/www/AI_salesman_plugin/aihub.md`.
+2. Confirm the Hub analytics endpoint returns the newer fields such as `latency_buckets`, `transport_mix`, and `action_rate`.
+3. Deploy this Client Panel.
+4. Reload the shared AI-KART Nginx edge config only if the public `/client-panel/` path returns `404` or `502`.
+
+The redesigned Client Panel is still backward compatible with older Hub responses, but the richer charts need the updated Hub analytics payload.
+
 ## 1. Fix Permissions
 
 ```bash
@@ -62,6 +71,8 @@ npm install
 npm run build
 ```
 
+Run a fresh build after every UI change. The public panel is served by Vite preview, so restarting PM2 without rebuilding can keep the old interface.
+
 ## 5. Start With PM2
 
 ```bash
@@ -78,12 +89,14 @@ pm2 list
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5177/client-panel/ai_kart
+curl -s http://127.0.0.1:5177/client-panel/ai_kart | grep -E 'assets/index-.*\.js'
 ```
 
 Expected:
 
 ```text
 200
+current Client Panel bundle path
 ```
 
 Open:
@@ -100,6 +113,12 @@ Login with:
 Client ID: ai_kart
 Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific password
 ```
+
+After login, check:
+
+- The header uses the AI-KART dark brand bar.
+- The page shows the voice commerce cockpit hero, KPI cards, demand trend, token policy, assistant health, product demand, intent mix, catalog health, and recent conversations.
+- The per-shopper/session token limit saves successfully.
 
 ## 7. Public Routing Requirement
 
@@ -130,11 +149,31 @@ CLIENT_PANEL_DEFAULT_PASSWORD=choose_client_panel_password
 CLIENT_PANEL_TOKEN_SECRET=choose_client_panel_token_secret
 ```
 
-After changing these values, rebuild/recreate the Hub app:
+The updated panel reads these Hub analytics fields when available:
+
+```text
+metrics.action_rate
+metrics.error_rate
+metrics.tokens_per_turn
+latency_buckets
+transport_mix
+peak_day
+```
+
+After changing Hub secrets or deploying the newer analytics API, rebuild/recreate the Hub app:
 
 ```bash
 cd /var/www/AI_salesman_plugin
-sudo docker compose up -d --build --force-recreate db app
+sudo docker compose build --no-cache app
+sudo docker compose up -d --force-recreate db app
+```
+
+Quick Hub API check:
+
+```bash
+curl -s "http://143.198.5.97/aihub/v1/admin/analytics?range=7d" \
+  -H "x-crm-admin-token: YOUR_CRM_ADMIN_TOKEN" \
+  | grep -E '"latency_buckets"|"transport_mix"|"action_rate"'
 ```
 
 ## 9. HTTPS Later
