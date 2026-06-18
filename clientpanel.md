@@ -1,42 +1,52 @@
-# Client Panel Deployment
+# Client Panel Deployment Runbook
 
-Use this for the client-facing analytics portal.
-
-```text
-Project:      /var/www/client_panel
-Local app:    http://127.0.0.1:5177
-Public URL:   http://143.198.5.97/client-panel/ai_kart
-Hub API:      http://143.198.5.97/aihub
-```
-
-All three projects share public port `80` and are separated by paths:
+Use this for the current no-DNS server setup.
 
 ```text
-/                  -> AI-KART website
-/api/              -> AI-KART backend
-/aihub/            -> AI Hub
-/client-panel/<client_id> -> Client Panel
+Client Panel project: /var/www/client_panel
+Client Panel local:   http://127.0.0.1:5177/client-panel/ai_kart
+Client Panel public:  http://143.198.5.97/client-panel/ai_kart
+Hub API public:       http://143.198.5.97/aihub
 ```
 
-The client name comes after `/client-panel/`. For this setup, `/client-panel/ai_kart` maps to `site_id=ai_kart`. Future clients use the same pattern, for example `/client-panel/acme_store`.
+Public routing is owned by AI-KART Nginx config:
 
-The panel still requires the client-panel password issued from AI Hub.
+```text
+/                         -> AI-KART frontend on 127.0.0.1:5175
+/api/                     -> AI-KART backend on 127.0.0.1:8000
+/aihub/                   -> AI Hub app on 127.0.0.1:5176
+/client-panel/<client_id> -> Client Panel on 127.0.0.1:5177
+```
 
-Deploy order for the current UI/API update:
+Deploy order:
 
-1. Deploy AI Hub first from `/var/www/AI_salesman_plugin/aihub.md`.
-2. Confirm the Hub analytics endpoint returns the newer fields such as `latency_buckets`, `transport_mix`, and `action_rate`.
-3. Deploy this Client Panel.
-4. Reload the shared AI-KART Nginx edge config only if the public `/client-panel/` path returns `404` or `502`.
+1. Deploy AI Hub from `/var/www/AI_salesman_plugin/aihub.md`.
+2. Confirm Hub analytics returns the new fields used by the richer Client Panel.
+3. Deploy Client Panel with this file.
+4. If public `/client-panel/ai_kart` fails but local `127.0.0.1:5177` works, reload shared Nginx from `/var/www/Vercel_website/aikart.md`.
 
-The redesigned Client Panel is still backward compatible with older Hub responses, but the richer charts need the updated Hub analytics payload.
-
-## 1. Fix Permissions
+## 1. Preflight
 
 ```bash
-sudo chown -R $(whoami):$(whoami) /var/www/client_panel
-sudo chown -R $(whoami):$(whoami) /Data/www/client_panel
+set -e
+
+cd /var/www/client_panel
+
+command -v git
+command -v curl
+command -v sudo
+
+pwd
+git status --short
 ```
+
+Expected:
+
+```text
+/var/www/client_panel
+```
+
+If `git status --short` shows local changes on the server, stop and inspect them before pulling.
 
 ## 2. Pull Code
 
@@ -45,7 +55,60 @@ cd /var/www/client_panel
 git pull
 ```
 
-## 3. Create Environment
+## 3. Fix Permissions
+
+```bash
+sudo chown -R $(whoami):$(whoami) /var/www/client_panel
+sudo mkdir -p /Data/www
+sudo chown -R $(whoami):$(whoami) /Data/www
+```
+
+## 4. Ensure Node For This Project
+
+This keeps Node local to the project and avoids depending on system Node.
+
+```bash
+cd /var/www/client_panel
+
+ARCH="$(uname -m)"
+if [ "$ARCH" = "x86_64" ]; then
+  NODE_ARCH="x64"
+elif [ "$ARCH" = "aarch64" ]; then
+  NODE_ARCH="arm64"
+else
+  echo "Unsupported arch: $ARCH"
+  exit 1
+fi
+
+mkdir -p /var/www/client_panel/.node
+cd /var/www/client_panel/.node
+
+NODE_FILE="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | grep "linux-${NODE_ARCH}.tar.xz" | awk '{print $2}' | head -n 1)"
+
+if [ ! -f "$NODE_FILE" ]; then
+  curl -fsSLO "https://nodejs.org/dist/latest-v22.x/${NODE_FILE}"
+fi
+
+tar -xf "$NODE_FILE"
+ln -sfn "${NODE_FILE%.tar.xz}" current
+
+export PATH="/var/www/client_panel/.node/current/bin:$PATH"
+node -v
+npm -v
+```
+
+## 5. Ensure PM2
+
+```bash
+if ! command -v pm2 >/dev/null 2>&1; then
+  sudo /var/www/client_panel/.node/current/bin/npm install -g pm2
+fi
+
+command -v pm2
+pm2 -v
+```
+
+## 6. Create Environment
 
 ```bash
 cat > /var/www/client_panel/.env.local <<'EOF'
@@ -55,37 +118,37 @@ VITE_DEFAULT_CLIENT_ID=ai_kart
 EOF
 ```
 
-Use HTTPS here after certificates are active:
+Keep `VITE_CLIENT_PANEL_BASE_PATH=/client-panel/` while the app is served on the same IP and public port as AI-KART.
 
-```text
-VITE_AI_HUB_API_BASE=https://143.198.5.97/aihub
-```
+## 7. Build Client Panel
 
-Keep `VITE_CLIENT_PANEL_BASE_PATH=/client-panel/` while the panel is served on the same domain and port as the website.
-
-## 4. Install And Build
+Run a fresh build after every UI change. Restarting PM2 without rebuilding can keep the old interface.
 
 ```bash
 cd /var/www/client_panel
+export PATH="/var/www/client_panel/.node/current/bin:$PATH"
 npm install
 npm run build
 ```
 
-Run a fresh build after every UI change. The public panel is served by Vite preview, so restarting PM2 without rebuilding can keep the old interface.
+## 8. Start With PM2
 
-## 5. Start With PM2
+This recreates the PM2 process so it uses the project-local npm path.
 
 ```bash
 cd /var/www/client_panel
-pm2 describe client-panel >/dev/null \
-  && pm2 restart client-panel \
-  || pm2 start "npm run preview -- --host 127.0.0.1 --port 5177" --name client-panel --cwd /var/www/client_panel
+
+pm2 delete client-panel || true
+pm2 start /var/www/client_panel/.node/current/bin/npm \
+  --name client-panel \
+  --cwd /var/www/client_panel \
+  -- run preview -- --host 127.0.0.1 --port 5177
 
 pm2 save
 pm2 list
 ```
 
-## 6. Test
+## 9. Test Local Client Panel
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5177/client-panel/ai_kart
@@ -99,48 +162,77 @@ Expected:
 current Client Panel bundle path
 ```
 
-Open:
+If this fails, check:
 
-```text
-http://143.198.5.97/client-panel/ai_kart
+```bash
+pm2 logs client-panel --lines 100
 ```
 
-If the public URL returns `404` or `502`, do not add Nginx config in this repo. Apply or reload the shared edge config from `/var/www/Vercel_website/aikart.md`.
+## 10. Confirm Hub API Contract
 
-Login with:
+The redesigned panel is backward compatible, but the richer charts need the updated Hub analytics fields.
 
-```text
-Client ID: ai_kart
-Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific password
+```bash
+cd /var/www/AI_salesman_plugin
+set -a
+. ./.env
+set +a
+
+curl -s "http://143.198.5.97/aihub/v1/admin/analytics?range=7d" \
+  -H "x-crm-admin-token: ${CRM_ADMIN_TOKEN}" \
+  | grep -E '"latency_buckets"|"transport_mix"|"action_rate"'
 ```
 
-After login, check:
+Expected:
 
-- The header uses the AI-KART dark brand bar.
-- The page shows the voice commerce cockpit hero, KPI cards, demand trend, token policy, assistant health, product demand, intent mix, catalog health, and recent conversations.
-- The per-shopper/session token limit saves successfully.
+```text
+analytics fields present
+```
 
-## 7. Public Routing Requirement
+If this fails, deploy AI Hub first from `/var/www/AI_salesman_plugin/aihub.md`.
 
-This project only owns the local panel app on `http://127.0.0.1:5177`.
-
-The public `/client-panel/` route is edge/shared Nginx config. In the current same-IP setup, AI-KART owns `/` and `/api/`, so the shared Nginx block belongs in `/var/www/Vercel_website/aikart.md`.
-
-Do not add AI-KART `/`, `/api/`, or AI Hub `/aihub/` proxy rules in this client panel guide. If you later use a dedicated hostname such as `panel.ergobite.com`, configure that hostname in Nginx to proxy directly to `http://127.0.0.1:5177`.
-
-After AI-KART/shared Nginx is deployed, test:
+## 11. Test Public Client Panel
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://143.198.5.97/client-panel/ai_kart
+curl -s http://143.198.5.97/client-panel/ai_kart | grep -E 'assets/index-.*\.js'
 ```
 
 Expected:
 
 ```text
 200
+current Client Panel bundle path
 ```
 
-## 8. Hub Requirements
+If local `127.0.0.1:5177/client-panel/ai_kart` is `200` but public `/client-panel/ai_kart` is not `200`, apply shared Nginx from:
+
+```text
+/var/www/Vercel_website/aikart.md
+```
+
+## 12. Browser Smoke
+
+Open:
+
+```text
+http://143.198.5.97/client-panel/ai_kart
+```
+
+Login:
+
+```text
+Client ID: ai_kart
+Password: value from AI Hub CLIENT_PANEL_DEFAULT_PASSWORD or the client-specific password
+```
+
+Check:
+
+- Header uses the AI-KART dark brand bar.
+- Page shows voice commerce cockpit hero, KPI cards, demand trend, token policy, assistant health, product demand, intent mix, catalog health, and recent conversations.
+- Per-shopper/session token limit saves successfully.
+
+## 13. Hub Requirements
 
 AI Hub `.env` must include:
 
@@ -149,18 +241,7 @@ CLIENT_PANEL_DEFAULT_PASSWORD=choose_client_panel_password
 CLIENT_PANEL_TOKEN_SECRET=choose_client_panel_token_secret
 ```
 
-The updated panel reads these Hub analytics fields when available:
-
-```text
-metrics.action_rate
-metrics.error_rate
-metrics.tokens_per_turn
-latency_buckets
-transport_mix
-peak_day
-```
-
-After changing Hub secrets or deploying the newer analytics API, rebuild/recreate the Hub app:
+If those values changed, rebuild AI Hub:
 
 ```bash
 cd /var/www/AI_salesman_plugin
@@ -168,20 +249,18 @@ sudo docker compose build --no-cache app
 sudo docker compose up -d --force-recreate db app
 ```
 
-Quick Hub API check:
-
-```bash
-curl -s "http://143.198.5.97/aihub/v1/admin/analytics?range=7d" \
-  -H "x-crm-admin-token: YOUR_CRM_ADMIN_TOKEN" \
-  | grep -E '"latency_buckets"|"transport_mix"|"action_rate"'
-```
-
-## 9. HTTPS Later
-
-For production, put this panel behind HTTPS with a clean hostname such as:
+## 14. Common Failure Map
 
 ```text
-https://panel.ergobite.com/ai_kart
-```
+Client Panel public URL is 502
+  -> PM2 app is not running or Nginx cannot reach 127.0.0.1:5177.
 
-Keep the path as the client name so each client gets a clear panel URL.
+Client Panel public URL is 404
+  -> Shared Nginx route is missing. Apply Vercel_website/aikart.md.
+
+Client Panel shows old plain UI
+  -> Run npm run build, then delete/start PM2 as in steps 7 and 8.
+
+Login fails
+  -> Check AI Hub CLIENT_PANEL_DEFAULT_PASSWORD and deploy/recreate Hub app.
+```
