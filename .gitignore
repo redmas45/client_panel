@@ -5,7 +5,10 @@ __pycache__/
 
 # Node / Vite
 node_modules/
+.node/
 dist/
+.deploy-backups/
+.env
 .env.local
 .vite/
 

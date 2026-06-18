@@ -15,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Deployment steps are in `clientpanel.md`.
+Deployment steps are in [clientpanel.md](clientpanel.md). The runbook stashes tracked server edits before `git pull --ff-only` and preserves ignored runtime files.
 
 Default dev URL:
 
