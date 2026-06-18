@@ -7,7 +7,6 @@ Client Panel project: /var/www/client_panel
 Client Panel local:   http://127.0.0.1:5177/client-panel/ai_kart
 Client Panel public:  http://143.198.5.97/client-panel/ai_kart
 Hub API public:       http://143.198.5.97/aihub
-Shared venv:          /Data/www/aikartvenv
 ```
 
 Public routing is owned by AI-KART's shared Nginx config in `/var/www/Vercel_website/aikart.md`:
@@ -23,7 +22,6 @@ Public routing is owned by AI-KART's shared Nginx config in `/var/www/Vercel_web
 
 - Deploy AI Hub first so the Client Panel API exists.
 - Apply AI-KART shared Nginx if the public `/client-panel/` route is missing.
-- The shared host Python venv is `/Data/www/aikartvenv`. Client Panel is Node-only, but this keeps the server venv standard consistent for helper scripts and future work.
 - `.env.local`, `.node`, `node_modules`, `dist`, and `.deploy-backups` are ignored runtime files.
 - The Git step stashes tracked server edits before pulling. It does not stash ignored runtime files.
 - Do not run `git stash pop` as part of deployment.
@@ -80,27 +78,9 @@ fix_tree_if_top_owner_is_wrong() {
 fix_tree_if_top_owner_is_wrong .node
 fix_tree_if_top_owner_is_wrong node_modules
 fix_tree_if_top_owner_is_wrong dist
-fix_tree_if_top_owner_is_wrong /Data/www/aikartvenv
 ```
 
-## 3. Ensure Shared Python Venv
-
-Client Panel does not run on Python. This step only ensures the shared server venv exists and is the same venv used by the other projects.
-
-```bash
-set -e
-cd /var/www/client_panel
-
-if [ ! -x /Data/www/aikartvenv/bin/python ]; then
-  python3 -m venv /Data/www/aikartvenv
-fi
-
-. /Data/www/aikartvenv/bin/activate
-which python
-python -m pip install --upgrade pip
-```
-
-## 4. Ensure Project-Local Node
+## 3. Ensure Project-Local Node
 
 This installs Node under the project at `.node/current`, so deployment does not depend on system Node.
 
@@ -129,7 +109,7 @@ node -v
 npm -v
 ```
 
-## 5. Ensure PM2
+## 4. Ensure PM2
 
 ```bash
 set -e
@@ -142,7 +122,7 @@ fi
 pm2 -v
 ```
 
-## 6. Ensure Env File
+## 5. Ensure Env File
 
 This creates `.env.local` only if missing. It does not overwrite an existing file.
 
@@ -169,7 +149,7 @@ VITE_CLIENT_PANEL_BASE_PATH=/client-panel/
 VITE_DEFAULT_CLIENT_ID=ai_kart
 ```
 
-## 7. Build Client Panel
+## 6. Build Client Panel
 
 ```bash
 set -e
@@ -180,7 +160,7 @@ npm install
 npm run build
 ```
 
-## 8. Restart Client Panel With PM2
+## 7. Restart Client Panel With PM2
 
 ```bash
 set -e
@@ -197,7 +177,7 @@ pm2 save
 pm2 list
 ```
 
-## 9. Local Smoke
+## 8. Local Smoke
 
 Run this before checking the public URL.
 
@@ -207,7 +187,7 @@ curl -fsS http://127.0.0.1:5177/client-panel/ai_kart | grep -E 'assets/index-.*\
 echo "Client Panel local deploy OK."
 ```
 
-## 10. Public Smoke
+## 9. Public Smoke
 
 Run this after AI-KART's shared Nginx route has been applied.
 
@@ -219,7 +199,7 @@ echo "Client Panel public route OK."
 
 If local `127.0.0.1:5177/client-panel/ai_kart` works but public `/client-panel/ai_kart` fails, apply `/var/www/Vercel_website/aikart.md`.
 
-## 11. Optional Hub API Contract Check
+## 10. Optional Hub API Contract Check
 
 Use this only if the panel loads but charts or analytics look wrong.
 
@@ -277,7 +257,7 @@ Public URL is 404
   -> Shared Nginx route is missing. Apply /var/www/Vercel_website/aikart.md.
 
 UI still looks old
-  -> Rerun steps 7 and 8; build first, then restart PM2.
+  -> Rerun steps 6 and 7; build first, then restart PM2.
 
 Login fails
   -> Check AI Hub CLIENT_PANEL_DEFAULT_PASSWORD and CLIENT_PANEL_TOKEN_SECRET, then redeploy AI Hub.
