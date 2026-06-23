@@ -123,10 +123,15 @@ Environment ownership:
 
 ```text
 src/
-  App.tsx       main workspace UI
+  App.tsx       app shell, auth state, dashboard loading
   api.ts        AI Hub API client
+  constants.ts  shared ranges and tab configuration
+  insights.ts   client-facing briefing, intent, forecast, and opportunity logic
+  utils.ts      formatting, routing, and session helpers
   types.ts      frontend data contracts
-  styles.css    UI styling
+  components/   reusable dashboard sections and UI primitives
+  views/        tab-level dashboard views
+  styles.css    global UI styling
 
 index.html      Vite HTML entry
 vite.config.ts  Vite config
